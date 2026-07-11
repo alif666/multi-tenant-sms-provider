@@ -1,13 +1,20 @@
 package one.formwork.channel.sms.cost;
 
 import jakarta.persistence.*;
-import one.formwork.base.tenant.filter.TenantScopedEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "sms_cost_record")
-public class SmsCostEntity extends TenantScopedEntity {
+public class SmsCostEntity {
+
+    @Id
+    @Column(nullable = false, updatable = false)
+    private UUID id = UUID.randomUUID();
+
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
     @Column(name = "message_id", length = 200)
     private String messageId;
@@ -36,13 +43,18 @@ public class SmsCostEntity extends TenantScopedEntity {
     @Column(name = "sent_at", nullable = false)
     private Instant sentAt;
 
-    @Override
     @PrePersist
     protected void onCreate() {
-        super.onCreate();
+        if (getId() == null) {
+            setId(UUID.randomUUID());
+        }
         if (sentAt == null) sentAt = Instant.now();
     }
 
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public UUID getTenantId() { return tenantId; }
+    public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }
     public String getMessageId() { return messageId; }
     public void setMessageId(String messageId) { this.messageId = messageId; }
     public String getProvider() { return provider; }
