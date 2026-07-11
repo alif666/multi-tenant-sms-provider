@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: formwork-postgres
+    environment:
+      POSTGRES_DB: formwork
+      POSTGRES_USER: formwork
+      POSTGRES_PASSWORD: formwork
+    ports:
+      - "5432:5432"
+    volumes:
+      - formwork_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  formwork_postgres_data:
