@@ -9,6 +9,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.ZoneOffset;
@@ -31,17 +32,35 @@ public class AwsSnsSmsGateway implements SmsGateway {
 
     private final WebClient webClient;
     private final SmsChannelProperties.AwsSnsProperties config;
+    private final String endpointBaseUrl;
+    private final String accessKey;
+    private final String secretKey;
 
     public AwsSnsSmsGateway(SmsChannelProperties.AwsSnsProperties config) {
+        this(config, WebClient.builder().build(), System.getenv("AWS_ACCESS_KEY_ID"),
+                System.getenv("AWS_SECRET_ACCESS_KEY"));
+    }
+
+    AwsSnsSmsGateway(SmsChannelProperties.AwsSnsProperties config, WebClient webClient, String accessKey, String secretKey) {
+        this(config, webClient, accessKey, secretKey, "https://sns." + config.getRegion() + ".amazonaws.com");
+    }
+
+    AwsSnsSmsGateway(SmsChannelProperties.AwsSnsProperties config, WebClient webClient, String accessKey, String secretKey, String endpointBaseUrl) {
         this.config = config;
-        this.webClient = WebClient.builder().build();
+        this.webClient = webClient;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
+        this.endpointBaseUrl = endpointBaseUrl;
     }
 
     @Override
     public SmsResult send(SmsMessage message) {
         String region = config.getRegion();
-        String host = "sns." + region + ".amazonaws.com";
-        String endpoint = "https://" + host;
+        URI endpoint = URI.create(endpointBaseUrl);
+        String host = endpoint.getHost();
+        if (endpoint.getPort() > 0) {
+            host = host + ":" + endpoint.getPort();
+        }
 
         TreeMap<String, String> params = new TreeMap<>();
         params.put("Action", "Publish");
@@ -60,8 +79,6 @@ public class AwsSnsSmsGateway implements SmsGateway {
                 .orElse("");
 
         try {
-            String accessKey = System.getenv("AWS_ACCESS_KEY_ID");
-            String secretKey = System.getenv("AWS_SECRET_ACCESS_KEY");
             if (accessKey == null || secretKey == null) {
                 return SmsResult.failure("AWS_SNS", "CONFIG_ERROR",
                         "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables required");
@@ -87,7 +104,7 @@ public class AwsSnsSmsGateway implements SmsGateway {
                     + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
 
             String responseBody = webClient.get()
-                    .uri(endpoint + "/?" + queryString)
+                    .uri(endpointBaseUrl + "/?" + queryString)
                     .header("Authorization", authorization)
                     .header("x-amz-date", amzDate)
                     .retrieve()
@@ -118,7 +135,10 @@ public class AwsSnsSmsGateway implements SmsGateway {
     }
 
     private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        return URLEncoder.encode(value, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("*", "%2A")
+                .replace("%7E", "~");
     }
 
     private static String sha256Hex(String data) {

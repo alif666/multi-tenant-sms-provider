@@ -29,11 +29,17 @@ class SmsChannelServiceTest {
     @Mock
     private SmsChannelProperties properties;
 
+    @Mock
+    private one.formwork.channel.sms.cost.SmsCostService costService;
+
+    @Mock
+    private TenantProviderRegistry tenantProviderRegistry;
+
     private SmsChannelService service;
 
     @BeforeEach
     void setUp() {
-        service = new SmsChannelService(List.of(twilioGateway, vonageGateway), properties);
+        service = new SmsChannelService(List.of(twilioGateway, vonageGateway), properties, costService, tenantProviderRegistry);
     }
 
     @Nested
@@ -42,6 +48,9 @@ class SmsChannelServiceTest {
         @Test
         void sendSms_ValidMessage_DelegatesToResolvedGateway() {
             when(properties.getProvider()).thenReturn("TWILIO");
+            when(properties.getFallbackProvider()).thenReturn("TWILIO");
+            when(properties.getRetry()).thenReturn(new SmsChannelProperties.RetryProperties());
+            when(tenantProviderRegistry.resolveProvider(tenantId, "TWILIO")).thenReturn("TWILIO");
             when(twilioGateway.supports("TWILIO")).thenReturn(true);
             SmsResult expected = SmsResult.success("msg-123", "TWILIO", 1);
             when(twilioGateway.send(any(SmsMessage.class))).thenReturn(expected);
@@ -52,11 +61,15 @@ class SmsChannelServiceTest {
             assertEquals(expected, result);
             verify(twilioGateway).send(message);
             verify(vonageGateway, never()).send(any());
+            verify(costService).recordCost(tenantId, "+4915112345678", expected);
         }
 
         @Test
         void sendSms_VonageProvider_UsesVonageGateway() {
             when(properties.getProvider()).thenReturn("VONAGE");
+            when(properties.getFallbackProvider()).thenReturn("TWILIO");
+            when(properties.getRetry()).thenReturn(new SmsChannelProperties.RetryProperties());
+            when(tenantProviderRegistry.resolveProvider(tenantId, "VONAGE")).thenReturn("VONAGE");
             when(twilioGateway.supports("VONAGE")).thenReturn(false);
             when(vonageGateway.supports("VONAGE")).thenReturn(true);
             SmsResult expected = SmsResult.success("msg-456", "VONAGE", 1);
@@ -81,6 +94,9 @@ class SmsChannelServiceTest {
         @Test
         void sendSms_NoMatchingGateway_ThrowsIllegalStateException() {
             when(properties.getProvider()).thenReturn("UNKNOWN");
+            when(properties.getFallbackProvider()).thenReturn("TWILIO");
+            when(properties.getRetry()).thenReturn(new SmsChannelProperties.RetryProperties());
+            when(tenantProviderRegistry.resolveProvider(tenantId, "UNKNOWN")).thenReturn("UNKNOWN");
             when(twilioGateway.supports("UNKNOWN")).thenReturn(false);
             when(vonageGateway.supports("UNKNOWN")).thenReturn(false);
 
@@ -90,6 +106,26 @@ class SmsChannelServiceTest {
                     () -> service.sendSms(message));
             assertTrue(ex.getMessage().contains("UNKNOWN"));
         }
+
+        @Test
+        void sendSms_TenantSpecificProvider_DoesNotUseGlobalDefault() {
+            when(properties.getProvider()).thenReturn("TWILIO");
+            when(properties.getFallbackProvider()).thenReturn("TWILIO");
+            when(properties.getRetry()).thenReturn(new SmsChannelProperties.RetryProperties());
+            when(tenantProviderRegistry.resolveProvider(tenantId, "TWILIO")).thenReturn("VONAGE");
+            when(twilioGateway.supports("VONAGE")).thenReturn(false);
+            when(vonageGateway.supports("VONAGE")).thenReturn(true);
+            SmsResult expected = SmsResult.success("msg-tenant", "VONAGE", 1);
+            when(vonageGateway.send(any(SmsMessage.class))).thenReturn(expected);
+
+            SmsMessage message = new SmsMessage("+4915112345678", "Hello", tenantId);
+
+            SmsResult result = service.sendSms(message);
+
+            assertEquals(expected, result);
+            verify(vonageGateway).send(message);
+            verify(twilioGateway, never()).send(any());
+        }
     }
 
     @Nested
@@ -98,6 +134,9 @@ class SmsChannelServiceTest {
         @Test
         void sendBulk_MultipleMessages_SendsEachIndividually() {
             when(properties.getProvider()).thenReturn("TWILIO");
+            when(properties.getFallbackProvider()).thenReturn("TWILIO");
+            when(properties.getRetry()).thenReturn(new SmsChannelProperties.RetryProperties());
+            when(tenantProviderRegistry.resolveProvider(eq(tenantId), any())).thenReturn("TWILIO");
             when(twilioGateway.supports("TWILIO")).thenReturn(true);
             SmsResult success = SmsResult.success("msg-1", "TWILIO", 1);
             when(twilioGateway.send(any(SmsMessage.class))).thenReturn(success);
@@ -118,6 +157,53 @@ class SmsChannelServiceTest {
         void sendBulk_EmptyList_ReturnsEmptyList() {
             List<SmsResult> results = service.sendBulk(List.of());
             assertTrue(results.isEmpty());
+        }
+    }
+
+    @Nested
+    class RetryAndFailover {
+
+        @Test
+        void sendSms_RetrysTransientFailure_ThenSucceeds() {
+            SmsChannelProperties.RetryProperties retry = new SmsChannelProperties.RetryProperties();
+            retry.setMaxAttempts(2);
+            retry.setBackoff("1ms");
+            when(properties.getProvider()).thenReturn("TWILIO");
+            when(properties.getFallbackProvider()).thenReturn("VONAGE");
+            when(properties.getRetry()).thenReturn(retry);
+            when(tenantProviderRegistry.resolveProvider(tenantId, "TWILIO")).thenReturn("TWILIO");
+            when(twilioGateway.supports("TWILIO")).thenReturn(true);
+            when(vonageGateway.supports("VONAGE")).thenReturn(true);
+            when(twilioGateway.send(any(SmsMessage.class)))
+                    .thenReturn(SmsResult.failure("TWILIO", "SEND_ERROR", "timeout"))
+                    .thenReturn(SmsResult.success("msg-2", "TWILIO", 1));
+
+            SmsResult result = service.sendSms(new SmsMessage("+4915112345678", "Hello", tenantId));
+
+            assertTrue(result.isSuccess());
+            verify(twilioGateway, times(2)).send(any(SmsMessage.class));
+            verify(vonageGateway, never()).send(any());
+        }
+
+        @Test
+        void sendSms_FailoverToSecondary_WhenPrimaryFails() {
+            SmsChannelProperties.RetryProperties retry = new SmsChannelProperties.RetryProperties();
+            retry.setMaxAttempts(1);
+            when(properties.getProvider()).thenReturn("TWILIO");
+            when(properties.getFallbackProvider()).thenReturn("VONAGE");
+            when(properties.getRetry()).thenReturn(retry);
+            when(tenantProviderRegistry.resolveProvider(tenantId, "TWILIO")).thenReturn("TWILIO");
+            when(twilioGateway.supports("TWILIO")).thenReturn(true);
+            when(vonageGateway.supports("VONAGE")).thenReturn(true);
+            when(twilioGateway.send(any(SmsMessage.class))).thenReturn(SmsResult.failure("TWILIO", "400", "bad request"));
+            SmsResult fallback = SmsResult.success("msg-fallback", "VONAGE", 1);
+            when(vonageGateway.send(any(SmsMessage.class))).thenReturn(fallback);
+
+            SmsResult result = service.sendSms(new SmsMessage("+4915112345678", "Hello", tenantId));
+
+            assertEquals(fallback, result);
+            verify(twilioGateway).send(any(SmsMessage.class));
+            verify(vonageGateway).send(any(SmsMessage.class));
         }
     }
 

@@ -11,6 +11,7 @@ public class SmsChannelProperties {
     private BudgetSmsProperties budgetSms = new BudgetSmsProperties();
     private MessageBirdProperties messagebird = new MessageBirdProperties();
     private RetryProperties retry = new RetryProperties();
+    private String fallbackProvider = "TWILIO";
 
     public String getProvider() { return provider; }
     public void setProvider(String p) { this.provider = p; }
@@ -26,6 +27,8 @@ public class SmsChannelProperties {
     public void setMessagebird(MessageBirdProperties m) { this.messagebird = m; }
     public RetryProperties getRetry() { return retry; }
     public void setRetry(RetryProperties r) { this.retry = r; }
+    public String getFallbackProvider() { return fallbackProvider; }
+    public void setFallbackProvider(String fallbackProvider) { this.fallbackProvider = fallbackProvider; }
 
     public static class TwilioProperties {
         private String accountSid; private String authToken; private String fromNumber;
