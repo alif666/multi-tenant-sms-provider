@@ -6,11 +6,12 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
 
 @AutoConfiguration
+@Profile("!dummy-profile")
 @ConditionalOnProperty(prefix = "formwork.sms-channel", name = "provider")
 @EnableConfigurationProperties(SmsChannelProperties.class)
-
 public class SmsChannelAutoConfiguration {
 
     @Bean

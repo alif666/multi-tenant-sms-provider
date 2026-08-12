@@ -1,0 +1,145 @@
+{
+  "info": {
+    "name": "Studio Butterfly SMS Dummy Provider Demo",
+    "description": "Safe local requests for tenant routing, retry, failover, cost recording, and runtime gateway inspection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "tenantA", "value": "00000000-0000-0000-0000-000000000001" },
+    { "key": "tenantB", "value": "00000000-0000-0000-0000-000000000002" }
+  ],
+  "item": [
+    {
+      "name": "0. Observe original conditional bean wiring (run local-observe profile)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "http://localhost:18081/demo/gateways"
+      }
+    },
+    {
+      "name": "1. Inspect runtime gateway beans",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/demo/gateways"
+      }
+    },
+    {
+      "name": "2. Reset local demo state",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/demo/reset"
+      }
+    },
+    {
+      "name": "3. Assign tenant A to VONAGE",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"provider\": \"VONAGE\"\n}" },
+        "url": "{{baseUrl}}/demo/tenants/{{tenantA}}/provider"
+      }
+    },
+    {
+      "name": "4. Send using tenant provider",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantA}}\",\n  \"to\": \"+4915112345678\",\n  \"body\": \"Tenant-specific provider test\",\n  \"referenceId\": \"postman-tenant-routing-1\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    },
+    {
+      "name": "5. Configure TWILIO to fail once",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"mode\": \"TRANSIENT_FAILURE\",\n  \"failuresBeforeSuccess\": 1,\n  \"segmentCount\": 1\n}" },
+        "url": "{{baseUrl}}/demo/providers/TWILIO/behavior"
+      }
+    },
+    {
+      "name": "6. Send and observe retry",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantB}}\",\n  \"to\": \"+4915112345678\",\n  \"body\": \"Retry test\",\n  \"referenceId\": \"postman-retry-1\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    },
+    {
+      "name": "7. Configure TWILIO to fail and force failover",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"mode\": \"TRANSIENT_FAILURE\",\n  \"failuresBeforeSuccess\": 5,\n  \"segmentCount\": 1\n}" },
+        "url": "{{baseUrl}}/demo/providers/TWILIO/behavior"
+      }
+    },
+    {
+      "name": "8. Send and observe VONAGE failover",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantB}}\",\n  \"to\": \"+4915112345678\",\n  \"body\": \"Failover test\",\n  \"referenceId\": \"postman-failover-1\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    },
+    {
+      "name": "9. Configure a three-segment success",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"mode\": \"SUCCESS\",\n  \"failuresBeforeSuccess\": 0,\n  \"segmentCount\": 3\n}" },
+        "url": "{{baseUrl}}/demo/providers/TWILIO/behavior"
+      }
+    },
+    {
+      "name": "10. Send and observe multi-segment cost",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantB}}\",\n  \"to\": \"+4915112345678\",\n  \"body\": \"Three segment cost test\",\n  \"referenceId\": \"postman-cost-3-segments\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    },
+    {
+      "name": "11. Read tenant B costs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/demo/costs/{{tenantB}}"
+      }
+    },
+    {
+      "name": "12. Invalid phone number",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantA}}\",\n  \"to\": \"not-a-phone-number\",\n  \"body\": \"Validation test\",\n  \"referenceId\": \"postman-invalid-phone\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    },
+    {
+      "name": "13. Unknown tenant provider",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"provider\": \"UNKNOWN_PROVIDER\"\n}" },
+        "url": "{{baseUrl}}/demo/tenants/{{tenantA}}/provider"
+      }
+    },
+    {
+      "name": "14. Send with unavailable provider",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tenantId\": \"{{tenantA}}\",\n  \"to\": \"+4915112345678\",\n  \"body\": \"Missing gateway test\",\n  \"referenceId\": \"postman-missing-gateway\"\n}" },
+        "url": "{{baseUrl}}/demo/messages"
+      }
+    }
+  ]
+}
