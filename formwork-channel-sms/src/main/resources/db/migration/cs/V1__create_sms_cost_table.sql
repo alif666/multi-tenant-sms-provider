@@ -1,4 +1,4 @@
--- V1: Create sms_cost_record table with TenantScopedEntity columns
+-- V1: Create sms_cost_record table with tenant-scoped columns
 CREATE TABLE IF NOT EXISTS sms_cost_record (
     id UUID PRIMARY KEY,
     tenant_id UUID NOT NULL,

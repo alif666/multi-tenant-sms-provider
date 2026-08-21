@@ -17,7 +17,6 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>formwork-base-tenant</module>
         <module>formwork-channel-sms</module>
     </modules>
 
