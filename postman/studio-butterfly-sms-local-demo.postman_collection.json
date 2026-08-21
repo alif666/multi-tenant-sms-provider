@@ -1,17 +1,116 @@
 {
   "info": {
-    "name": "Studio Butterfly SMS Dummy Provider Demo",
-    "description": "Safe local requests for tenant routing, retry, failover, cost recording, and runtime gateway inspection.",
+    "name": "Studio Butterfly SMS Admin and Dummy Provider Demo",
+    "description": "CSRF/JWT authentication, temporary admin registration, tenant provider assignment, retry, failover, cost recording, and runtime gateway inspection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "adminUsername", "value": "admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe-Postman-Admin-25!" },
+    { "key": "jwt", "value": "" },
+    { "key": "csrfToken", "value": "" },
     { "key": "tenantA", "value": "00000000-0000-0000-0000-000000000001" },
     { "key": "tenantB", "value": "00000000-0000-0000-0000-000000000002" }
   ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const csrf = pm.collectionVariables.get('csrfToken');",
+          "if (csrf && pm.request.method !== 'GET' && pm.request.method !== 'HEAD') {",
+          "  pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: csrf });",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
     {
-      "name": "0. Observe original conditional bean wiring (run local-observe profile)",
+      "name": "0. Get CSRF token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/csrf-token/public"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('csrfToken', body.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Register temporary ROLE_ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "2. Login and save JWT",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('jwt', body.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create tenant A",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{tenantA}}\",\n  \"name\": \"Postman Tenant A\"\n}"
+        },
+        "url": "{{baseUrl}}/api/admin/tenants"
+      }
+    },
+    {
+      "name": "4. Assign tenant A to VONAGE (admin endpoint)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"provider\": \"VONAGE\"\n}" },
+        "url": "{{baseUrl}}/api/admin/tenants/{{tenantA}}/provider"
+      }
+    },
+    {
+      "name": "5. Observe all runtime gateway beans",
       "request": {
         "method": "GET",
         "header": [],
@@ -19,7 +118,7 @@
       }
     },
     {
-      "name": "1. Inspect runtime gateway beans",
+      "name": "6. Inspect runtime gateway beans",
       "request": {
         "method": "GET",
         "header": [],
@@ -27,7 +126,7 @@
       }
     },
     {
-      "name": "2. Reset local demo state",
+      "name": "7. Reset local demo state",
       "request": {
         "method": "POST",
         "header": [],
@@ -35,7 +134,7 @@
       }
     },
     {
-      "name": "3. Assign tenant A to VONAGE",
+      "name": "8. Assign tenant A through demo compatibility endpoint",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -44,7 +143,7 @@
       }
     },
     {
-      "name": "4. Send using tenant provider",
+      "name": "9. Send using tenant provider",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -53,7 +152,7 @@
       }
     },
     {
-      "name": "5. Configure TWILIO to fail once",
+      "name": "10. Configure TWILIO to fail once",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -62,7 +161,7 @@
       }
     },
     {
-      "name": "6. Send and observe retry",
+      "name": "11. Send and observe retry",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -71,7 +170,7 @@
       }
     },
     {
-      "name": "7. Configure TWILIO to fail and force failover",
+      "name": "12. Configure TWILIO to fail and force failover",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -80,7 +179,7 @@
       }
     },
     {
-      "name": "8. Send and observe VONAGE failover",
+      "name": "13. Send and observe VONAGE failover",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -89,7 +188,7 @@
       }
     },
     {
-      "name": "9. Configure a three-segment success",
+      "name": "14. Configure a three-segment success",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -98,7 +197,7 @@
       }
     },
     {
-      "name": "10. Send and observe multi-segment cost",
+      "name": "15. Send and observe multi-segment cost",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -107,7 +206,7 @@
       }
     },
     {
-      "name": "11. Read tenant B costs",
+      "name": "16. Read tenant B costs",
       "request": {
         "method": "GET",
         "header": [],
@@ -115,7 +214,7 @@
       }
     },
     {
-      "name": "12. Invalid phone number",
+      "name": "17. Invalid phone number",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -124,16 +223,16 @@
       }
     },
     {
-      "name": "13. Unknown tenant provider",
+      "name": "18. Unknown tenant provider (admin endpoint)",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"provider\": \"UNKNOWN_PROVIDER\"\n}" },
-        "url": "{{baseUrl}}/demo/tenants/{{tenantA}}/provider"
+        "url": "{{baseUrl}}/api/admin/tenants/{{tenantA}}/provider"
       }
     },
     {
-      "name": "14. Send with unavailable provider",
+      "name": "19. Send with unavailable provider",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],

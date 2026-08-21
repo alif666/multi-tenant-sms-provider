@@ -9,10 +9,16 @@ spring:
       ddl-auto: validate
     open-in-view: false
   flyway:
+    locations: classpath:db/migration/cs
     baseline-on-migrate: true
     baseline-version: 1
 
 formwork:
+  security:
+    jwt-secret: ${FORMWORK_JWT_SECRET:change-this-development-secret-which-must-be-at-least-32-bytes}
+    jwt-issuer: ${FORMWORK_JWT_ISSUER:formwork-sms}
+    jwt-expiration-minutes: ${FORMWORK_JWT_EXPIRATION_MINUTES:60}
+    allowed-origins: ${FORMWORK_ALLOWED_ORIGINS:http://localhost:3000}
   sms-channel:
     provider: TWILIO
     fallback-provider: TWILIO

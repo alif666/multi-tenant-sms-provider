@@ -57,6 +57,14 @@ the real provider names: `TWILIO`, `VONAGE`, `AWS_SNS`, `BUDGET_SMS`, and
 
 ## Postman
 
+The service now uses JWT authentication and CSRF protection. Before any state-changing
+request in Postman, call `GET http://localhost:8080/csrf-token/public`, retain the
+`XSRF-TOKEN` cookie, and send its value in the `X-XSRF-TOKEN` header. Register the
+temporary admin with `POST /auth/register` using a password of at least 12 characters,
+then call `POST /auth/login` and send the returned token as `Authorization: Bearer ...`.
+Tenant provider assignment is available to that admin at
+`PUT /api/admin/tenants/{tenantId}/provider`.
+
 Import:
 
 ```text
